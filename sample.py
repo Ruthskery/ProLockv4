@@ -19,13 +19,14 @@ class AttendanceApp:
         self.root = root
         self.root.title("Fingerprint and NFC Reader")
 
-        # Initialize the text-to-speech engine with eSpeak driver for Raspberry Pi
+        # Attempt to initialize the text-to-speech engine
         try:
-            self.speech_engine = pyttsx3.init(driverName='espeak')
+            self.speech_engine = pyttsx3.init(driverName='espeak')  # Ensure the correct driver is used for Raspberry Pi
             self.speech_engine.setProperty('rate', 150)  # Set speech rate
             self.speech_engine.setProperty('volume', 0.9)  # Set volume level
         except Exception as e:
             print(f"Failed to initialize TTS engine: {e}")
+            self.speech_engine = None  # Set to None to handle in speak method
 
         # Define custom fonts and UI setup
         heading_font = font.Font(family="Helvetica", size=16, weight="bold")
@@ -39,11 +40,14 @@ class AttendanceApp:
 
     def speak(self, message):
         """Function to use TTS engine to speak a given message."""
-        try:
-            self.speech_engine.say(message)
-            self.speech_engine.runAndWait()
-        except Exception as e:
-            print(f"Error in TTS speak: {e}")
+        if self.speech_engine:
+            try:
+                self.speech_engine.say(message)
+                self.speech_engine.runAndWait()
+            except Exception as e:
+                print(f"Error in TTS speak: {e}")
+        else:
+            print("TTS engine is not available. Unable to speak.")
 
     # Implement TTS in relevant methods
     def record_time_in_fingerprint(self, fingerprint_id, user_name, role_id="2"):
@@ -118,7 +122,3 @@ app = AttendanceApp(root)
 
 # Run the application
 root.mainloop()
-
-Error in TTS speak: 'AttendanceApp' object has no attribute 'speech_engine'
-
-
