@@ -1,15 +1,18 @@
 import pyttsx3
 
+# Initialize the TTS engine
 engine = pyttsx3.init()
 
-# Set a specific voice by ID (replace 'voice_id' with the actual ID you want)
-desired_voice_id = 'english_rp+f4'  # Example voice ID, change based on your list
-engine.setProperty('voice', desired_voice_id)
+# Retrieve all available voices
+voices = engine.getProperty('voices')
 
-# Adjust additional properties as needed
-engine.setProperty('rate', 150)  # Speech speed (words per minute)
-engine.setProperty('volume', 1)  # Volume level (0.0 to 1.0)
-
-# Test the selected voice
-engine.say("Hello, this is a test using the selected voice.")
-engine.runAndWait()
+# Print out the voice IDs along with their names
+print("Complete List of Available Voice IDs:")
+for index, voice in enumerate(voices):
+    print(f"Voice {index}:")
+    print(f" - Name: {voice.name}")
+    print(f" - ID: {voice.id}")
+    print(f" - Languages: {voice.languages}")
+    print(f" - Gender: {voice.gender}")
+    print(f" - Age: {voice.age}")
+    print("-" * 40)
