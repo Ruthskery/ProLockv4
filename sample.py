@@ -3,44 +3,52 @@ def auto_scan_fingerprint(self):
 
     while self.running:
         if not self.finger:
+            print("Fingerprint sensor not initialized.")
             return
 
         print("Waiting for fingerprint image...")
-        
-        # Wait until a fingerprint is placed on the sensor
-        while self.finger.get_image() != adafruit_fingerprint.OK:
-            if not self.running:
-                return
-            time.sleep(0.5)  # Sleep to avoid too frequent checks
 
-        # Attempt to template the fingerprint
+        # Check if the sensor is detecting a finger placed on it
+        while True:
+            image_status = self.finger.get_image()
+            if image_status == adafruit_fingerprint.OK:
+                print("Fingerprint image taken.")
+                break
+            elif image_status == adafruit_fingerprint.NOFINGER:
+                # If no finger is detected, wait before retrying
+                time.sleep(0.5)
+                continue
+            else:
+                print("Error", "Failed to get image.")
+                time.sleep(0.5)
+                continue
+
         print("Templating...")
-        if self.finger.image_2_tz(1) != adafruit_fingerprint.OK:
+        template_status = self.finger.image_2_tz(1)
+        if template_status != adafruit_fingerprint.OK:
             print("Error", "Failed to template the fingerprint image.")
             failed_attempts += 1
-            self.check_failed_attempts(failed_attempts)
-            time.sleep(1)  # Delay before retrying
+            self.check_failed_attempts(failed_attempts)  # Check failed attempts and trigger the buzzer if needed
             continue
 
-        # Search for a fingerprint match
-        print("Searching...")
-        if self.finger.finger_search() != adafruit_fingerprint.OK:
+        print("Searching for fingerprint match...")
+        search_status = self.finger.finger_search()
+        if search_status != adafruit_fingerprint.OK:
             print("Error", "Failed to search for fingerprint match.")
             failed_attempts += 1
-            self.check_failed_attempts(failed_attempts)
-            time.sleep(1)  # Delay before retrying
+            self.check_failed_attempts(failed_attempts)  # Check failed attempts and trigger the buzzer if needed
             continue
 
-        # Reset failed attempts if a fingerprint match is successful
+        # Reset failed attempts if successful
         failed_attempts = 0
 
-        print("Detected fingerprint ID:", self.finger.finger_id, "with confidence", self.finger.confidence)
+        print(f"Detected fingerprint ID: {self.finger.finger_id} with confidence {self.finger.confidence}")
 
-        # Handle the matched fingerprint, e.g., by unlocking the door or logging access
+        # Fetch user details using API
         name = self.get_user_details(self.finger.finger_id)
 
         if name:
-            if self.get_schedule(self.finger.finger_id):  # Check schedule validity
+            if self.get_schedule(self.finger.finger_id):  # Check if the current time is within the allowed schedule
                 current_time_data = self.fetch_current_date_time()
                 if not current_time_data:
                     return
@@ -50,25 +58,20 @@ def auto_scan_fingerprint(self):
                 if not self.check_time_in_record_fingerprint(self.finger.finger_id):
                     self.record_time_in_fingerprint(self.finger.finger_id, name)
                     self.unlock_door()
-                    self.is_manual_unlock = True
-                    self.last_time_in[self.finger.finger_id] = current_time
+                    self.is_manual_unlock = True  # Set flag to indicate manual unlock
+                    self.last_time_in[self.finger.finger_id] = current_time  # Store the time-in time
                     print(f"Welcome, {name}! Door unlocked.")
+                    self.speak(f"Welcome, {name}! Door unlocked.")
                 else:
                     self.record_time_out_fingerprint(self.finger.finger_id)
                     self.lock_door()
-                    self.is_manual_unlock = False
-                    self.record_all_time_out()
+                    self.is_manual_unlock = False  # Reset flag as door is locked again
+                    self.record_all_time_out()  # Record time-out for all entries without time-out
                     print(f"Goodbye, {name}! Door locked.")
+                    self.speak(f"Goodbye, {name}! Door locked.")
             else:
-                print("Access denied due to schedule restrictions.")
-
+                print("No Access", "Access denied due to schedule restrictions.")
+                self.speak("Access denied due to schedule restrictions.")
         else:
-            print("No matching fingerprint found in the database.")
-
-        # Ensure a pause before allowing another fingerprint scan
-        print("Please remove your finger.")
-        while self.finger.get_image() != adafruit_fingerprint.NOFINGER:
-            time.sleep(0.5)  # Wait until the finger is removed
-
-        # Small delay to avoid immediate re-scanning
-        time.sleep(2)
+            print("No Match", "No matching fingerprint found in the database.")
+            self.speak("No matching fingerprint found.")
