@@ -118,3 +118,7 @@ app = AttendanceApp(root)
 
 # Run the application
 root.mainloop()
+
+Error in TTS speak: 'AttendanceApp' object has no attribute 'speech_engine'
+
+
