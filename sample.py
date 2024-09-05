@@ -1,27 +1,15 @@
 import pyttsx3
 
-def test_tts_with_voice():
-    try:
-        engine = pyttsx3.init(driverName='espeak')  # Explicitly specify the eSpeak driver
-        engine.setProperty('rate', 150)  # Set speech rate
-        engine.setProperty('volume', 0.9)  # Set volume level
-        
-        # List available voices
-        voices = engine.getProperty('voices')
-        for voice in voices:
-            print(f"Voice ID: {voice.id}, Name: {voice.name}")
+engine = pyttsx3.init()
 
-        # Set a specific voice if needed
-        engine.setProperty('voice', voices[0].id)  # Use the first available voice
-        
-        engine.say("Testing text to speech on Raspberry Pi with a specific voice.")
-        engine.runAndWait()
-    except Exception as e:
-        print(f"Error initializing TTS engine: {e}")
+# Set a specific voice by ID (replace 'voice_id' with the actual ID you want)
+desired_voice_id = 'english_rp+f4'  # Example voice ID, change based on your list
+engine.setProperty('voice', desired_voice_id)
 
-test_tts_with_voice()
+# Adjust additional properties as needed
+engine.setProperty('rate', 150)  # Speech speed (words per minute)
+engine.setProperty('volume', 1)  # Volume level (0.0 to 1.0)
 
-Error initializing TTS engine: 'NoneType' object has no attribute '_handle'
-
-sudo apt install espeak espeak-ng libespeak1
-
+# Test the selected voice
+engine.say("Hello, this is a test using the selected voice.")
+engine.runAndWait()
