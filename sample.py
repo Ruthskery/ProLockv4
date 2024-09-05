@@ -13,3 +13,8 @@ def speak(self, message):
             self.speech_engine.runAndWait()
         except Exception as e:
             print(f"Error in TTS speak: {e}")
+
+ self.speak(f"Time-In recorded successfully for {user_name}. Welcome!")
+        except requests.RequestException as e:
+
+self.speak("Error recording Time-In.")
