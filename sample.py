@@ -133,9 +133,6 @@ class AttendanceApp:
         # Logs Table
         self.create_logs_table(main_frame)
 
-        # Fetch and display recent logs
-        self.fetch_recent_logs()
-
         # Initialize NFC reader
         try:
             self.clf = nfc.ContactlessFrontend('usb')
@@ -158,6 +155,9 @@ class AttendanceApp:
         self.last_time_in = {}
         self.is_manual_unlock = False  # Flag to check if the door was manually unlocked
 
+        # Fetch and display recent logs
+        self.fetch_recent_logs()
+
         # Start periodic checking of log status
         self.root.after(1000, self.check_log_status_periodically)  # Check log status every 10 seconds
 
@@ -172,7 +172,7 @@ class AttendanceApp:
         return entry
 
     def create_logs_table(self, parent_frame):
-          # Create a new style for the Treeview with background color set to #D3D1ED
+        # Create a new style for the Treeview with background color set to #D3D1ED
         style = ttk.Style()
         style.configure("LogsTable.Treeview.Heading", background="#D3D1ED", font=("Helvetica", 10, "bold"))
         style.configure("LogsTable.Treeview", background="#F6F5FB", fieldbackground="#F6F5FB", rowheight=25)
@@ -185,6 +185,29 @@ class AttendanceApp:
         for col in columns:
             self.logs_tree.heading(col, text=col)
             self.logs_tree.column(col, minwidth=100, width=100, anchor='center')
+
+    def fetch_recent_logs(self):
+        """Fetch and display recent logs in the logs table."""
+        try:
+            response = requests.get(RECENT_LOGS_URL)
+            response.raise_for_status()
+            logs = response.json()
+            for i in self.logs_tree.get_children():
+                self.logs_tree.delete(i)
+            for log in logs:
+                self.logs_tree.insert("", "end", values=(
+                    log.get('date', 'N/A'),
+                    log.get('user_name', 'N/A'),
+                    log.get('pc_name', 'N/A'),
+                    log.get('user_number', 'N/A'),
+                    log.get('year', 'N/A'),
+                    log.get('block_name', 'N/A'),
+                    log.get('role_name', 'N/A'),
+                    log.get('time_in', 'N/A'),
+                    log.get('time_out', 'N/A')
+                ))
+        except requests.RequestException as e:
+            self.update_result(f"Error fetching recent logs: {e}")
 
     def initialize_serial(self):
         try:
@@ -362,86 +385,83 @@ class AttendanceApp:
         except requests.RequestException as e:
             print(f"Error recording Time-Out: {e}")
 
-  
+    def auto_scan_fingerprint(self):
+        failed_attempts = 0  # Initialize the counter for failed attempts
 
-def auto_scan_fingerprint(self):
-    failed_attempts = 0  # Initialize the counter for failed attempts
+        while self.running:
+            if not self.finger:
+                print("Fingerprint sensor not initialized.")
+                return
 
-    while self.running:
-        if not self.finger:
-            print("Fingerprint sensor not initialized.")
-            return
+            print("Waiting for fingerprint image...")
 
-        print("Waiting for fingerprint image...")
-
-        # Check if the sensor is detecting a finger placed on it
-        while True:
-            image_status = self.finger.get_image()
-            if image_status == adafruit_fingerprint.OK:
-                print("Fingerprint image taken.")
-                break
-            elif image_status == adafruit_fingerprint.NOFINGER:
-                # If no finger is detected, wait before retrying
-                time.sleep(0.5)
-                continue
-            else:
-                print("Error", "Failed to get image.")
-                time.sleep(0.5)
-                continue
-
-        print("Templating...")
-        template_status = self.finger.image_2_tz(1)
-        if template_status != adafruit_fingerprint.OK:
-            print("Error", "Failed to template the fingerprint image.")
-            failed_attempts += 1
-            self.check_failed_attempts(failed_attempts)  # Check failed attempts and trigger the buzzer if needed
-            continue
-
-        print("Searching for fingerprint match...")
-        search_status = self.finger.finger_search()
-        if search_status != adafruit_fingerprint.OK:
-            print("Error", "Failed to search for fingerprint match.")
-            failed_attempts += 1
-            self.check_failed_attempts(failed_attempts)  # Check failed attempts and trigger the buzzer if needed
-            continue
-
-        # Reset failed attempts if successful
-        failed_attempts = 0
-
-        print(f"Detected fingerprint ID: {self.finger.finger_id} with confidence {self.finger.confidence}")
-
-        # Fetch user details using API
-        name = self.get_user_details(self.finger.finger_id)
-
-        if name:
-            if self.get_schedule(self.finger.finger_id):  # Check if the current time is within the allowed schedule
-                current_time_data = self.fetch_current_date_time()
-                if not current_time_data:
-                    return
-                current_time = datetime.strptime(current_time_data['current_time'], "%H:%M")
-
-                # Check if the user has no time-in record
-                if not self.check_time_in_record_fingerprint(self.finger.finger_id):
-                    self.record_time_in_fingerprint(self.finger.finger_id, name)
-                    self.unlock_door()
-                    self.is_manual_unlock = True  # Set flag to indicate manual unlock
-                    self.last_time_in[self.finger.finger_id] = current_time  # Store the time-in time
-                    print(f"Welcome, {name}! Door unlocked.")
-                    self.speak(f"Welcome, {name}! Door unlocked.")
+            # Check if the sensor is detecting a finger placed on it
+            while True:
+                image_status = self.finger.get_image()
+                if image_status == adafruit_fingerprint.OK:
+                    print("Fingerprint image taken.")
+                    break
+                elif image_status == adafruit_fingerprint.NOFINGER:
+                    # If no finger is detected, wait before retrying
+                    time.sleep(0.5)
+                    continue
                 else:
-                    self.record_time_out_fingerprint(self.finger.finger_id)
-                    self.lock_door()
-                    self.is_manual_unlock = False  # Reset flag as door is locked again
-                    self.record_all_time_out()  # Record time-out for all entries without time-out
-                    print(f"Goodbye, {name}! Door locked.")
-                    self.speak(f"Goodbye, {name}! Door locked.")
-            else:
-                print("No Access", "Access denied due to schedule restrictions.")
-                self.speak("Access denied due to schedule restrictions.")
-        else:
-            print("No Match", "No matching fingerprint found in the database.")
-            self.speak("No matching fingerprint found.")
+                    print("Error", "Failed to get image.")
+                    time.sleep(0.5)
+                    continue
 
+            print("Templating...")
+            template_status = self.finger.image_2_tz(1)
+            if template_status != adafruit_fingerprint.OK:
+                print("Error", "Failed to template the fingerprint image.")
+                failed_attempts += 1
+                self.check_failed_attempts(failed_attempts)  # Check failed attempts and trigger the buzzer if needed
+                continue
+
+            print("Searching for fingerprint match...")
+            search_status = self.finger.finger_search()
+            if search_status != adafruit_fingerprint.OK:
+                print("Error", "Failed to search for fingerprint match.")
+                failed_attempts += 1
+                self.check_failed_attempts(failed_attempts)  # Check failed attempts and trigger the buzzer if needed
+                continue
+
+            # Reset failed attempts if successful
+            failed_attempts = 0
+
+            print(f"Detected fingerprint ID: {self.finger.finger_id} with confidence {self.finger.confidence}")
+
+            # Fetch user details using API
+            name = self.get_user_details(self.finger.finger_id)
+
+            if name:
+                if self.get_schedule(self.finger.finger_id):  # Check if the current time is within the allowed schedule
+                    current_time_data = self.fetch_current_date_time()
+                    if not current_time_data:
+                        return
+                    current_time = datetime.strptime(current_time_data['current_time'], "%H:%M")
+
+                    # Check if the user has no time-in record
+                    if not self.check_time_in_record_fingerprint(self.finger.finger_id):
+                        self.record_time_in_fingerprint(self.finger.finger_id, name)
+                        self.unlock_door()
+                        self.is_manual_unlock = True  # Set flag to indicate manual unlock
+                        self.last_time_in[self.finger.finger_id] = current_time  # Store the time-in time
+                        print(f"Welcome, {name}! Door unlocked.")
+                        self.speak(f"Welcome, {name}! Door unlocked.")
+                    else:
+                        self.record_time_out_fingerprint(self.finger.finger_id)
+                        self.lock_door()
+                        self.is_manual_unlock = False  # Reset flag as door is locked again
+                        self.record_all_time_out()  # Record time-out for all entries without time-out
+                        print(f"Goodbye, {name}! Door locked.")
+                        self.speak(f"Goodbye, {name}! Door locked.")
+                else:
+                    print("No Access", "Access denied due to schedule restrictions.")
+                    self.speak("Access denied due to schedule restrictions.")
+            else:
+                print("No Match", "No matching fingerprint found in the database.")
+                self.speak("No matching fingerprint found.")
 
     def check_failed_attempts(self, failed_attempts):
         if failed_attempts >= 3:
@@ -478,28 +498,6 @@ def auto_scan_fingerprint(self):
 
     def refresh_logs_table(self):
         self.root.after(100, self.fetch_recent_logs)
-
-    def fetch_recent_logs(self):
-        try:
-            response = requests.get(RECENT_LOGS_URL)
-            response.raise_for_status()
-            logs = response.json()
-            for i in self.logs_tree.get_children():
-                self.logs_tree.delete(i)
-            for log in logs:
-                self.logs_tree.insert("", "end", values=(
-                    log.get('date', 'N/A'),
-                    log.get('user_name', 'N/A'),
-                    log.get('pc_name', 'N/A'),
-                    log.get('user_number', 'N/A'),
-                    log.get('year', 'N/A'),
-                    log.get('block_name', 'N/A'),
-                    log.get('role_name', 'N/A'),
-                    log.get('time_in', 'N/A'),
-                    log.get('time_out', 'N/A')
-                ))
-        except requests.RequestException as e:
-            self.update_result(f"Error fetching recent logs: {e}")
 
     def read_nfc_loop(self):
         while self.running:
@@ -633,10 +631,3 @@ app = AttendanceApp(root)
 
 # Run the application
 root.mainloop()
-
-Traceback (most recent call last):
-  File "/home/miko/Downloads/prolockv2/prolock_voice.py", line 632, in <module>
-    app = AttendanceApp(root)
-  File "/home/miko/Downloads/prolockv2/prolock_voice.py", line 137, in __init__
-    self.fetch_recent_logs()
-AttributeError: 'AttendanceApp' object has no attribute 'fetch_recent_logs'
