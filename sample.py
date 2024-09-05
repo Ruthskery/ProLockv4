@@ -23,3 +23,5 @@ test_tts_with_voice()
 
 Error initializing TTS engine: 'NoneType' object has no attribute '_handle'
 
+sudo apt install espeak espeak-ng libespeak1
+
