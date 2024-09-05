@@ -5,17 +5,21 @@ class AttendanceApp:
     def __init__(self, root):
         # Existing code...
 
-        # Initialize the text-to-speech engine
-        self.speech_engine = pyttsx3.init()
-        self.speech_engine.setProperty('rate', 150)  # Set speed of speech
-        self.speech_engine.setProperty('volume', 0.9)  # Set volume level (0.0 to 1.0)
-
+        try:
+            self.speech_engine = pyttsx3.init(driverName='espeak')
+            self.speech_engine.setProperty('rate', 150)  # Set speech rate
+            self.speech_engine.setProperty('volume', 0.9)  # Set volume level
+        except Exception as e:
+            print(f"Failed to initialize TTS engine: {e}")
         # Existing code continues...
 
-    def speak(self, message):
-        """Function to speak the provided message."""
-        self.speech_engine.say(message)
-        self.speech_engine.runAndWait()
+   def speak(self, message):
+        """Function to use TTS engine to speak a given message."""
+        try:
+            self.speech_engine.say(message)
+            self.speech_engine.runAndWait()
+        except Exception as e:
+            print(f"Error in TTS speak: {e}")
 
     def record_time_in_fingerprint(self, fingerprint_id, user_name, role_id="2"):
         try:
