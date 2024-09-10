@@ -8,11 +8,8 @@ from tkinter import ttk, font, messagebox
 from PIL import Image, ImageTk
 import RPi.GPIO as GPIO
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime
 import pyttsx3  # Import pyttsx3 for text-to-speech
-# Additional import for subprocess
-import subprocess
-
 
 # API URLs for Fingerprint, NFC, and Current Date-Time
 FINGERPRINT_API_URL = "https://prolocklogger.pro/api/getuserbyfingerprint/"
@@ -28,8 +25,13 @@ TIME_OUT_URL = 'https://prolocklogger.pro/api/logs/time-out'
 RECENT_LOGS_URL2 = 'https://prolocklogger.pro/api/recent-logs/by-uid'
 CURRENT_DATE_TIME_URL = 'https://prolocklogger.pro/api/current-date-time'
 LAB_SCHEDULE_URL = 'https://prolocklogger.pro/api/student/lab-schedule/rfid/'
-LOGS_URL = 'https://prolocklogger.pro/api/logs'  # Added log status API URL
+LOGS_URL = 'https://prolocklogger.pro/api/logs'
 
+# Faculty and Admin API endpoints
+API_URL = 'https://prolocklogger.pro/api'
+FACULTIES_URL = f'{API_URL}/users/role/2'
+ENROLL_URL = f'{API_URL}/users/update-fingerprint'
+ADMIN_URL = f'{API_URL}/admin/role/1'
 
 # GPIO pin configuration for the solenoid lock and buzzer
 SOLENOID_PIN = 17
@@ -45,7 +47,7 @@ class AttendanceApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Fingerprint and NFC Reader")
-        
+
         # Attempt to initialize the text-to-speech engine
         try:
             self.speech_engine = pyttsx3.init(driverName='espeak')  # Ensure the correct driver is used for Raspberry Pi
@@ -58,103 +60,14 @@ class AttendanceApp:
         # Define custom fonts
         heading_font = font.Font(family="Helvetica", size=16, weight="bold")
         label_font = font.Font(family="Helvetica", size=12, weight="bold")
-        
-        # Create a style for the main frame with a black background
-        style = ttk.Style()
-        style.configure("MainFrame.TFrame", background="#2D3F7C")
-        style.configure("ContainerFrame.TFrame", background="#F6F5FB")  # Style for NFC and Fingerprint container frames
 
         # Create the main frame with specified dimensions
-        main_frame = ttk.Frame(self.root, padding="20", width=1400, height=800, style="MainFrame.TFrame")
-        main_frame.pack(fill="both", expand=True)
-        main_frame.pack_propagate(False)  # Prevent the frame from resizing to fit its contents
+        self.main_frame = ttk.Frame(self.root, padding="20", width=1400, height=800, style="MainFrame.TFrame")
+        self.main_frame.pack(fill="both", expand=True)
+        self.main_frame.pack_propagate(False)  # Prevent the frame from resizing to fit its contents
 
-        # Create the heading frame to organize images and heading text
-        heading_frame = ttk.Frame(main_frame, padding="10", style="ContainerFrame.TFrame")
-        heading_frame.pack(fill="x")
-
-        # Load and place the left image (60x30)
-        left_image_path = "prolockk.png"  # Replace with your left image file path
-        left_image = Image.open(left_image_path).resize((170, 50))
-        left_photo = ImageTk.PhotoImage(left_image)
-        # Modify the left image to act as a button
-        left_image_label = tk.Button(
-            heading_frame, 
-            image=left_photo, 
-            bg="#F6F5FB", 
-            command=self.open_fingproc
-        )
-        left_image_label.image = left_photo  # Keep a reference to avoid garbage collection
-        left_image_label.pack(side="left", padx=1)
-    
-        # Create a separate frame for the main heading to center it
-        center_frame = ttk.Frame(heading_frame, style="ContainerFrame.TFrame")
-        center_frame.pack(side="left", fill="x", expand=True)
-
-        # Create the main heading and center it
-        main_heading = tk.Label(center_frame, text="Fingerprint and RFID Attendance System", font=heading_font, fg="#000000", bg="#F6F5FB")
-        main_heading.pack(anchor="center")  # Center the label in the frame
-
-        # Load and place the first right image (40x40)
-        right_image1_path = "cspclogo.png"  # Replace with your first right image file path
-        right_image1 = Image.open(right_image1_path).resize((60, 60))
-        right_photo1 = ImageTk.PhotoImage(right_image1)
-        right_image_label1 = tk.Label(heading_frame, image=right_photo1, bg="#F6F5FB")
-        right_image_label1.image = right_photo1  # Keep a reference to avoid garbage collection
-        right_image_label1.pack(side="right", padx=5)
-
-        # Load and place the second right image (40x40)
-        right_image2_path = "ccslogo.png"  # Replace with your second right image file path
-        right_image2 = Image.open(right_image2_path).resize((60, 60))
-        right_photo2 = ImageTk.PhotoImage(right_image2)
-        right_image_label2 = tk.Label(heading_frame, image=right_photo2, bg="#F6F5FB")
-        right_image_label2.image = right_photo2  # Keep a reference to avoid garbage collection
-        right_image_label2.pack(side="right", padx=5)
-
-        # Top frame for fingerprint and NFC
-        top_frame = ttk.Frame(main_frame, padding="10", style="ContainerFrame.TFrame")
-        top_frame.pack(side="top", fill="x")
-
-        # Fingerprint frame
-        left_frame = ttk.Frame(top_frame, padding="10", style="ContainerFrame.TFrame")
-        left_frame.pack(side="left", fill="y", expand=True)
-        fingerprint_label = ttk.Label(left_frame, text="Fingerprint Sensor", font=("Arial", 16, "bold"), background="#F6F5FB")
-        fingerprint_label.pack(pady=20)
-        
-        # Load and resize an image
-        image_path = "fingericon.png"  # Replace with your image file path
-        desired_width = 150
-        desired_height = 130
-
-        # Load and resize the image
-        image = Image.open(image_path)
-        image = image.resize((desired_width, desired_height))
-        photo = ImageTk.PhotoImage(image)
-
-        # Create and pack the image label
-        image_label = tk.Label(left_frame, image=photo, bg="#F6F5FB")
-        image_label.image = photo  # Keep a reference to the image
-        image_label.pack()  # Pack the image label to make it appear
-
-        # NFC frame
-        right_frame = ttk.Frame(top_frame, padding="10", style="ContainerFrame.TFrame")
-        right_frame.pack(side="right", fill="y", expand=True)
-
-        # Student Number, Name, Year, Section labels and entries
-        self.student_number_entry = self.create_label_entry(right_frame, "Student Number:", label_font)
-        self.name_entry = self.create_label_entry(right_frame, "Name:", label_font)
-        self.year_entry = self.create_label_entry(right_frame, "Year:", label_font)
-        self.section_entry = self.create_label_entry(right_frame, "Section:", label_font)
-
-        # Error Message Label
-        self.error_label = tk.Label(main_frame, text="", font=("Helvetica", 10, "bold", "italic"), foreground="red", bg="#000000")
-        self.error_label.pack(pady=10)
-
-        # Logs Table
-        self.create_logs_table(main_frame)
-
-        # Fetch and display recent logs
-        self.fetch_recent_logs()
+        # Initialize the Attendance System UI
+        self.create_attendance_ui(heading_font, label_font)
 
         # Initialize NFC reader
         try:
@@ -183,42 +96,74 @@ class AttendanceApp:
 
         # Handle window close event
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
-    # Define the function to open fingproc.py
-    def open_fingproc(self):
-        self.root.destroy()  # Close the current window
-        subprocess.Popen(["python3", "fingproc.py"])  # Run fingproc.py
-    def speak(self, message):
-        """Function to use TTS engine to speak a given message."""
-        if self.speech_engine:
-            try:
-                self.speech_engine.say(message)
-                self.speech_engine.runAndWait()
-            except Exception as e:
-                print(f"Error in TTS speak: {e}")
-        else:
-            print("TTS engine is not available. Unable to speak.")
 
-    def create_label_entry(self, frame, text, font_style):
-        label = ttk.Label(frame, text=text, font=font_style, background="#F6F5FB")
-        label.pack(pady=5)
-        entry = ttk.Entry(frame, font=font_style)
-        entry.pack(pady=5)
-        return entry
+    def create_attendance_ui(self, heading_font, label_font):
+        # Attendance System UI
+        self.attendance_frame = ttk.Frame(self.main_frame, padding="20", style="MainFrame.TFrame")
+        self.attendance_frame.pack(fill="both", expand=True)
 
-    def create_logs_table(self, parent_frame):
-          # Create a new style for the Treeview with background color set to #D3D1ED
-        style = ttk.Style()
-        style.configure("LogsTable.Treeview.Heading", background="#D3D1ED", font=("Helvetica", 10, "bold"))
-        style.configure("LogsTable.Treeview", background="#F6F5FB", fieldbackground="#F6F5FB", rowheight=25)
-        style.map("LogsTable.Treeview", background=[('selected', '#B0B0E0')])  # Optional: set a different color for selected rows
-        table_frame = ttk.Frame(parent_frame, padding="10", style="ContainerFrame.TFrame")
-        table_frame.pack(side="bottom", fill="both", expand=True)
-        columns = ("Date", "Name", "PC", "Student Number", "Year", "Section", "Faculty", "Time-in", "Time-out")
-        self.logs_tree = ttk.Treeview(table_frame, columns=columns, show='headings', style="LogsTable.Treeview")
-        self.logs_tree.pack(pady=10, fill='both', expand=True)
-        for col in columns:
-            self.logs_tree.heading(col, text=col)
-            self.logs_tree.column(col, minwidth=100, width=100, anchor='center')
+        # Create the heading frame to organize images and heading text
+        heading_frame = ttk.Frame(self.attendance_frame, padding="10", style="ContainerFrame.TFrame")
+        heading_frame.pack(fill="x")
+
+        # Load and place the left image (60x30)
+        left_image_path = "prolockk.png"  # Replace with your left image file path
+        left_image = Image.open(left_image_path).resize((170, 50))
+        left_photo = ImageTk.PhotoImage(left_image)
+        # Modify the left image to act as a button
+        left_image_label = tk.Button(
+            heading_frame, 
+            image=left_photo, 
+            bg="#F6F5FB", 
+            command=self.open_enrollment_form
+        )
+        left_image_label.image = left_photo  # Keep a reference to avoid garbage collection
+        left_image_label.pack(side="left", padx=1)
+
+        # Create a separate frame for the main heading to center it
+        center_frame = ttk.Frame(heading_frame, style="ContainerFrame.TFrame")
+        center_frame.pack(side="left", fill="x", expand=True)
+
+        # Create the main heading and center it
+        main_heading = tk.Label(center_frame, text="Fingerprint and RFID Attendance System", font=heading_font, fg="#000000", bg="#F6F5FB")
+        main_heading.pack(anchor="center")  # Center the label in the frame
+
+        # Load and place the first right image (40x40)
+        right_image1_path = "cspclogo.png"  # Replace with your first right image file path
+        right_image1 = Image.open(right_image1_path).resize((60, 60))
+        right_photo1 = ImageTk.PhotoImage(right_image1)
+        right_image_label1 = tk.Label(heading_frame, image=right_photo1, bg="#F6F5FB")
+        right_image_label1.image = right_photo1  # Keep a reference to avoid garbage collection
+        right_image_label1.pack(side="right", padx=5)
+
+        # Load and place the second right image (40x40)
+        right_image2_path = "ccslogo.png"  # Replace with your second right image file path
+        right_image2 = Image.open(right_image2_path).resize((60, 60))
+        right_photo2 = ImageTk.PhotoImage(right_image2)
+        right_image_label2 = tk.Label(heading_frame, image=right_photo2, bg="#F6F5FB")
+        right_image_label2.image = right_photo2  # Keep a reference to avoid garbage collection
+        right_image_label2.pack(side="right", padx=5)
+
+        # Add additional UI elements (e.g., log table, input fields, etc.)
+        # Example: Logs Table
+        self.create_logs_table(self.attendance_frame)
+
+        # Button to open the fingerprint enrollment form
+        enroll_button = tk.Button(self.attendance_frame, text="Open Fingerprint Enrollment", command=self.open_enrollment_form)
+        enroll_button.pack(pady=10)
+
+    def open_enrollment_form(self):
+        # Hide the attendance frame
+        self.attendance_frame.pack_forget()
+
+        # Create and show the enrollment form
+        self.enrollment_frame = FingerprintEnrollment(self.root, self.show_attendance_form)
+        self.enrollment_frame.pack(fill="both", expand=True)
+
+    def show_attendance_form(self):
+        # Hide the enrollment frame and show the attendance form again
+        self.enrollment_frame.pack_forget()
+        self.attendance_frame.pack(fill="both", expand=True)
 
     def initialize_serial(self):
         try:
@@ -227,178 +172,6 @@ class AttendanceApp:
         except serial.SerialException as e:
             print("Serial Error", f"Failed to connect to serial port: {e}")
             return None
-
-    def unlock_door(self):
-        GPIO.output(SOLENOID_PIN, GPIO.LOW)
-        print("Door unlocked.")
-
-    def lock_door(self):
-        GPIO.output(SOLENOID_PIN, GPIO.HIGH)
-        print("Door locked.")
-
-    def fetch_latest_log_status(self):
-        try:
-            response = requests.get(LOGS_URL)
-            response.raise_for_status()
-            logs = response.json().get("logs", [])
-
-            if logs:
-                latest_log = logs[-1]  # Get the latest log (assumes logs are in chronological order)
-                status = latest_log.get("status", "")
-
-                # Only lock the door if it was not manually unlocked
-                if not self.is_manual_unlock:
-                    if status == "close":
-                        self.lock_door()
-                    elif status == "open":
-                        self.unlock_door()
-        except requests.RequestException as e:
-            print(f"Error fetching log status: {e}")
-
-    def check_log_status_periodically(self):
-        self.fetch_latest_log_status()
-        self.root.after(10000, self.check_log_status_periodically)  # Call again after 10 seconds
-
-    def get_user_details(self, fingerprint_id):
-        try:
-            response = requests.get(f"{FINGERPRINT_API_URL}{fingerprint_id}")
-            response.raise_for_status()
-            data = response.json()
-            return data.get('name', None)
-        except requests.RequestException as e:
-            print("API Error", f"Failed to fetch data from API: {e}")
-            return None
-
-    def fetch_current_date_time(self):
-        try:
-            response = requests.get(CURRENT_DATE_TIME_URL)
-            response.raise_for_status()
-            data = response.json()
-            if 'day_of_week' in data and 'current_time' in data:
-                return data
-            else:
-                print("Error: Missing expected keys in the API response.")
-                return None
-        except requests.RequestException as e:
-            print(f"Error fetching current date and time from API: {e}")
-            return None
-
-    def get_schedule(self, fingerprint_id):
-        try:
-            current_time_data = self.fetch_current_date_time()
-            if not current_time_data:
-                print("Error: Could not fetch current date and time from API.")
-                return False
-
-            current_day = current_time_data.get('day_of_week')
-            current_time = current_time_data.get('current_time')
-
-            if not current_day or not current_time:
-                print("Error: Invalid response from current date-time API.")
-                return False
-
-            print(f"Current Day from API: {current_day}, Current Time from API: {current_time}")
-
-            response = requests.get(f"{LAB_SCHEDULE_FINGERPRINT_URL}{fingerprint_id}")
-            response.raise_for_status()
-            schedules = response.json()
-
-            for schedule in schedules:
-                schedule_day = schedule.get('day_of_the_week')
-                start_time = schedule.get('class_start')
-                end_time = schedule.get('class_end')
-
-                if schedule_day and start_time and end_time:
-                    print(f"Checking Schedule: Day: {schedule_day}, Start: {start_time}, End: {end_time}")
-
-                    if schedule_day == current_day:
-                        if start_time <= current_time <= end_time:
-                            print("Access allowed based on schedule.")
-                            return True
-
-            print("Access denied: No matching schedule found or not within allowed time.")
-            return False
-        except requests.RequestException as e:
-            print("Request Error", f"Failed to connect to API: {e}")
-            return False
-
-    def get_rfid_schedule(self, rfid_number):
-        try:
-            current_time_data = self.fetch_current_date_time()
-            if not current_time_data:
-                print("Error: Could not fetch current date and time from API.")
-                return False
-
-            current_day = current_time_data.get('day_of_week')
-            current_time = current_time_data.get('current_time')
-
-            if not current_day or not current_time:
-                print("Error: Invalid response from current date-time API.")
-                return False
-
-            print(f"Current Day from API: {current_day}, Current Time from API: {current_time}")
-
-            response = requests.get(f"{LAB_SCHEDULE_URL}{rfid_number}")
-            response.raise_for_status()
-            schedules = response.json()
-
-            for schedule in schedules:
-                schedule_day = schedule.get('day_of_the_week')
-                start_time = schedule.get('class_start')
-                end_time = schedule.get('class_end')
-
-                if schedule_day and start_time and end_time:
-                    print(f"Checking Schedule: Day: {schedule_day}, Start: {start_time}, End: {end_time}")
-
-                    if schedule_day == current_day and start_time <= current_time <= end_time:
-                        print("Access allowed based on schedule.")
-                        return True
-
-            print("Access denied: No matching schedule found or not within allowed time.")
-            return False
-        except requests.RequestException as e:
-            print(f"Error fetching or checking schedule: {e}")
-            return False
-
-    def check_time_in_record_fingerprint(self, fingerprint_id):
-        try:
-            url = f"{RECENT_LOGS_FINGERPRINT_URL2}?fingerprint_id={fingerprint_id}"
-            response = requests.get(url)
-            response.raise_for_status()
-            logs = response.json()
-            return any(log.get('time_in') and not log.get('time_out') for log in logs)
-        except requests.RequestException as e:
-            print(f"Error checking Time-In record: {e}")
-            return False
-
-    def record_time_in_fingerprint(self, fingerprint_id, user_name, role_id="2"):
-        try:
-            current_time_data = self.fetch_current_date_time()
-            if not current_time_data:
-                return
-            url = f"{TIME_IN_FINGERPRINT_URL}?fingerprint_id={fingerprint_id}&time_in={current_time_data['current_time']}&user_name={user_name}&role_id={role_id}"
-            response = requests.put(url)
-            response.raise_for_status()
-            print("Time-In recorded successfully.")
-            print("Success", "Time-In recorded successfully.")
-            self.speak(f"Time-In recorded successfully for {user_name}. Welcome!")
-        except requests.RequestException as e:
-            print("Error", f"Error recording Time-In: {e}")
-            self.speak("Error recording Time-In.")
-
-    def record_time_out_fingerprint(self, fingerprint_id):
-        try:
-            current_time_data = self.fetch_current_date_time()
-            if not current_time_data:
-                return
-            url = f"{TIME_OUT_FINGERPRINT_URL}?fingerprint_id={fingerprint_id}&time_out={current_time_data['current_time']}"
-            response = requests.put(url)
-            response.raise_for_status()
-            print("Time-Out recorded successfully.")
-            self.speak("Time-Out recorded successfully. Goodbye!")
-        except requests.RequestException as e:
-            print(f"Error recording Time-Out: {e}")
-            self.speak("Error recording Time-Out.")
 
     def auto_scan_fingerprint(self):
         failed_attempts = 0  # Initialize the counter for failed attempts
@@ -416,13 +189,12 @@ class AttendanceApp:
             print("Templating...")
             if self.finger.image_2_tz(1) != adafruit_fingerprint.OK:
                 print("Error", "Failed to template the fingerprint image.")
-                 # Check failed attempts and trigger the buzzer if needed
                 continue
 
             print("Searching...")
             if self.finger.finger_search() != adafruit_fingerprint.OK:
                 print("Error", "Failed to search for fingerprint match.")
-                self.speak(f"Error, Failed to search for fingerprint match..")
+                self.speak(f"Error, Failed to search for fingerprint match.")
                 failed_attempts += 1
                 self.check_failed_attempts(failed_attempts)  # Check failed attempts and trigger the buzzer if needed
                 continue
@@ -465,18 +237,115 @@ class AttendanceApp:
                 print("No Match", "No matching fingerprint found in the database.")
                 self.speak("No matching fingerprint found.")
 
-    def check_failed_attempts(self, failed_attempts):
-        if failed_attempts >= 3:
-            print("Three consecutive failed attempts detected. Activating buzzer.")
-            self.trigger_buzzer()
-            failed_attempts = 0
+    def create_logs_table(self, parent_frame):
+        # Create a new style for the Treeview with background color set to #D3D1ED
+        style = ttk.Style()
+        style.configure("LogsTable.Treeview.Heading", background="#D3D1ED", font=("Helvetica", 10, "bold"))
+        style.configure("LogsTable.Treeview", background="#F6F5FB", fieldbackground="#F6F5FB", rowheight=25)
+        style.map("LogsTable.Treeview", background=[('selected', '#B0B0E0')])  # Optional: set a different color for selected rows
+        table_frame = ttk.Frame(parent_frame, padding="10", style="ContainerFrame.TFrame")
+        table_frame.pack(side="bottom", fill="both", expand=True)
+        columns = ("Date", "Name", "PC", "Student Number", "Year", "Section", "Faculty", "Time-in", "Time-out")
+        self.logs_tree = ttk.Treeview(table_frame, columns=columns, show='headings', style="LogsTable.Treeview")
+        self.logs_tree.pack(pady=10, fill='both', expand=True)
+        for col in columns:
+            self.logs_tree.heading(col, text=col)
+            self.logs_tree.column(col, minwidth=100, width=100, anchor='center')
 
-    def trigger_buzzer(self):
-        for _ in range(50):  # 5 seconds with 0.1-second intervals
-            GPIO.output(BUZZER_PIN, GPIO.HIGH)
-            time.sleep(0.1)
-            GPIO.output(BUZZER_PIN, GPIO.LOW)
-            time.sleep(0.1)
+    def fetch_current_date_time(self):
+        try:
+            response = requests.get(CURRENT_DATE_TIME_URL)
+            response.raise_for_status()
+            data = response.json()
+            if 'day_of_week' in data and 'current_time' in data:
+                return data
+            else:
+                print("Error: Missing expected keys in the API response.")
+                return None
+        except requests.RequestException as e:
+            print(f"Error fetching current date and time from API: {e}")
+            return None
+
+    def get_user_details(self, fingerprint_id):
+        try:
+            response = requests.get(f"{FINGERPRINT_API_URL}{fingerprint_id}")
+            response.raise_for_status()
+            data = response.json()
+            return data.get('name', None)
+        except requests.RequestException as e:
+            print("API Error", f"Failed to fetch data from API: {e}")
+            return None
+
+    def record_time_in_fingerprint(self, fingerprint_id, user_name, role_id="2"):
+        try:
+            current_time_data = self.fetch_current_date_time()
+            if not current_time_data:
+                return
+            url = f"{TIME_IN_FINGERPRINT_URL}?fingerprint_id={fingerprint_id}&time_in={current_time_data['current_time']}&user_name={user_name}&role_id={role_id}"
+            response = requests.put(url)
+            response.raise_for_status()
+            print("Time-In recorded successfully.")
+            print("Success", "Time-In recorded successfully.")
+            self.speak(f"Time-In recorded successfully for {user_name}. Welcome!")
+        except requests.RequestException as e:
+            print("Error", f"Error recording Time-In: {e}")
+            self.speak("Error recording Time-In.")
+
+    def record_time_out_fingerprint(self, fingerprint_id):
+        try:
+            current_time_data = self.fetch_current_date_time()
+            if not current_time_data:
+                return
+            url = f"{TIME_OUT_FINGERPRINT_URL}?fingerprint_id={fingerprint_id}&time_out={current_time_data['current_time']}"
+            response = requests.put(url)
+            response.raise_for_status()
+            print("Time-Out recorded successfully.")
+            self.speak("Time-Out recorded successfully. Goodbye!")
+        except requests.RequestException as e:
+            print(f"Error recording Time-Out: {e}")
+            self.speak("Error recording Time-Out.")
+
+    def check_log_status_periodically(self):
+        self.fetch_latest_log_status()
+        self.root.after(10000, self.check_log_status_periodically)  # Call again after 10 seconds
+
+    def fetch_latest_log_status(self):
+        try:
+            response = requests.get(LOGS_URL)
+            response.raise_for_status()
+            logs = response.json().get("logs", [])
+
+            if logs:
+                latest_log = logs[-1]  # Get the latest log (assumes logs are in chronological order)
+                status = latest_log.get("status", "")
+
+                # Only lock the door if it was not manually unlocked
+                if not self.is_manual_unlock:
+                    if status == "close":
+                        self.lock_door()
+                    elif status == "open":
+                        self.unlock_door()
+        except requests.RequestException as e:
+            print(f"Error fetching log status: {e}")
+
+    def unlock_door(self):
+        GPIO.output(SOLENOID_PIN, GPIO.LOW)
+        print("Door unlocked.")
+
+    def lock_door(self):
+        GPIO.output(SOLENOID_PIN, GPIO.HIGH)
+        print("Door locked.")
+
+    def check_time_in_record_fingerprint(self, fingerprint_id):
+        try:
+            url = f"{RECENT_LOGS_FINGERPRINT_URL2}?fingerprint_id={fingerprint_id}"
+            response = requests.get(url)
+            response.raise_for_status()
+            logs = response.json()
+            return any(log.get('time_in') and not log.get('time_out') for log in logs)
+        except requests.RequestException as e:
+            print(f"Error checking Time-In record: {e}")
+            return False
 
     def record_all_time_out(self):
         try:
@@ -638,6 +507,17 @@ class AttendanceApp:
     def update_result(self, message):
         self.error_label.config(text=message)
 
+    def speak(self, message):
+        """Function to use TTS engine to speak a given message."""
+        if self.speech_engine:
+            try:
+                self.speech_engine.say(message)
+                self.speech_engine.runAndWait()
+            except Exception as e:
+                print(f"Error in TTS speak: {e}")
+        else:
+            print("TTS engine is not available. Unable to speak.")
+
     def on_closing(self):
         self.running = False
         if self.nfc_thread.is_alive():
@@ -649,36 +529,157 @@ class AttendanceApp:
         self.root.destroy()
 
 
-# Create the main window
-root = tk.Tk()
-app = AttendanceApp(root)
+class FingerprintEnrollment(tk.Frame):
+    def __init__(self, parent, go_back_callback):
+        super().__init__(parent)
+        self.go_back_callback = go_back_callback
+        self.configure(bg='#2D3F7C')
+        self.create_enrollment_ui()
 
-# Run the application
-root.mainloop()
+    def create_enrollment_ui(self):
+        panel = tk.Frame(self, bg='#F6F5FB')
+        panel.place(x=50, y=50, width=600, height=400)
 
-import tkinter as tk
-from tkinter import messagebox, ttk, font
-import requests
-import serial
-import adafruit_fingerprint
-import subprocess  # Import subprocess module
-import RPi.GPIO as GPIO  # Import GPIO if it's being used
+        # Create Treeview for displaying faculty data
+        columns = ("name", "email")
+        self.tree = ttk.Treeview(self, columns=columns, show="headings", style="LogsTable.Treeview")
 
-# Laravel API endpoint URLs
-api_url = "https://prolocklogger.pro/api/getuserbyfingerprint/"
-API_URL = 'https://prolocklogger.pro/api'
-FACULTIES_URL = f'{API_URL}/users/role/2'
-ENROLL_URL = f'{API_URL}/users/update-fingerprint'
-ADMIN_URL = f'{API_URL}/admin/role/1'
+        # Configure column widths
+        self.tree.column("name", width=250)  # Set width for "name" column
+        self.tree.column("email", width=250)  # Set width for "email" column
 
-# Initialize serial connection for the fingerprint sensor
-uart = serial.Serial("/dev/ttyUSB0", baudrate=57600, timeout=1)
-finger = adafruit_fingerprint.Adafruit_Fingerprint(uart)
+        # Set headings
+        self.tree.heading("name", text="Name")
+        self.tree.heading("email", text="Email")
+
+        # Set height (number of visible rows)
+        self.tree.configure(height=10)  # Number of visible rows
+        self.tree.place(x=100, y=80)
+
+        bold_font = font.Font(size=10, weight="bold")
+
+        # Refresh Button
+        refresh_button = tk.Button(self, text="Refresh Data", font=bold_font, width=20, height=2, command=self.refresh_table)
+        refresh_button.place(x=150, y=380)
+
+        # Enroll Button
+        enroll_button = tk.Button(self, text="Enroll Fingerprint", font=bold_font, width=20, height=2, command=self.on_enroll_button_click)
+        enroll_button.place(x=400, y=380)
+
+        # Add a "Back to Main" button
+        back_button = tk.Button(self, text="Back to Main", font=bold_font, width=20, height=2, command=self.go_back_callback)
+        back_button.place(x=275, y=440)  # Position it below the existing buttons
+
+        # Load initial data
+        self.refresh_table()
+
+    def refresh_table(self):
+        """Refresh the table with data from the Laravel API."""
+        for row in self.tree.get_children():
+            self.tree.delete(row)
+
+        faculty_data = self.fetch_faculty_data()
+        for faculty in faculty_data:
+            self.tree.insert("", tk.END, values=(faculty['name'], faculty['email']))
+
+        admin_data = self.fetch_admin_data()
+        for admin in admin_data:
+            self.tree.insert("", tk.END, values=(admin['name'], admin['email']))
+
+    def fetch_faculty_data(self):
+        try:
+            response = requests.get(FACULTIES_URL)
+            response.raise_for_status()
+            data = response.json()
+            return [faculty for faculty in data if faculty.get('fingerprint_id') is None or len(faculty.get('fingerprint_id', []) )< 2]
+        except requests.RequestException as e:
+            messagebox.showerror("Error", f"Error fetching faculty data: {e}")
+            return []
+
+    def fetch_admin_data(self):
+        try:
+            response = requests.get(ADMIN_URL)
+            response.raise_for_status()
+            data = response.json()
+            return [admin for admin in data if admin.get('fingerprint_id') is None or len(admin.get('fingerprint_id', []) )< 2]
+        except requests.RequestException as e:
+            messagebox.showerror("Error", f"Error fetching admin data: {e}")
+            return []
+
+    def on_enroll_button_click(self):
+        selected_item = self.tree.selection()
+        if not selected_item:
+            messagebox.showwarning("Selection Error", "Please select a row from the table.")
+            return
+
+        item = self.tree.item(selected_item)
+        name = item['values'][0]  # Assuming name is in the first column
+        email = item['values'][1]  # Assuming email is in the second column
+
+        # Enroll fingerprint with the selected email
+        success = self.enroll_fingerprint(email)
+        if not success:
+            messagebox.showwarning("Enrollment Error", "Failed to enroll fingerprint.")
+        else:
+            self.refresh_table()
+
+    def enroll_fingerprint(self, email):
+        """Enroll a fingerprint for a faculty member, ensuring it's not already registered."""
+        # Attempt to capture the first image
+        print("Waiting for image...")
+        while finger.get_image() != adafruit_fingerprint.OK:
+            pass
+
+        print("Templating first image...")
+        if finger.image_2_tz(1) != adafruit_fingerprint.OK:
+            messagebox.showwarning("Error", "Failed to template the first fingerprint image.")
+            return False
+
+        print("Checking if fingerprint is already registered...")
+        if finger.finger_search() == adafruit_fingerprint.OK:
+            existing_user = get_user(finger.finger_id)
+            if existing_user:
+                messagebox.showwarning("Error", f"Fingerprint already registered to {existing_user}")
+                return False
+
+        # Prompt to place the finger again for verification
+        print("Place the same finger again...")
+        while finger.get_image() != adafruit_fingerprint.OK:
+            pass
+
+        print("Templating second image...")
+        if finger.image_2_tz(2) != adafruit_fingerprint.OK:
+            messagebox.showwarning("Error", "Failed to template the second fingerprint image.")
+            return False
+
+        print("Re-Checking if fingerprint is already registered...")
+        if finger.finger_search() == adafruit_fingerprint.OK:
+            existing_user = get_user(finger.finger_id)
+            if existing_user:
+                messagebox.showwarning("Error", f"Fingerprint already registered to {existing_user}")
+                return False
+
+        print("Creating model from images...")
+        if finger.create_model() != adafruit_fingerprint.OK:
+            messagebox.showwarning("Error", "Failed to create fingerprint model from images.")
+            return False
+
+        next_fingerprint_id = get_highest_fingerprint_id() + 1
+
+        print(f"Storing model at location #{next_fingerprint_id}...")
+        if finger.store_model(next_fingerprint_id) != adafruit_fingerprint.OK:
+            messagebox.showwarning("Error", "Failed to store fingerprint model.")
+            return False
+
+        # Post the fingerprint data to the API
+        post_fingerprint(email, next_fingerprint_id)
+        return True
+
 
 def get_user(fingerprint_id):
     """Fetch user information by fingerprint ID."""
     try:
-        response = requests.get(f"{api_url}{fingerprint_id}")
+        response = requests.get(f"{FINGERPRINT_API_URL}{fingerprint_id}")
         response.raise_for_status()
         data = response.json()
         if 'name' in data:
@@ -687,45 +688,6 @@ def get_user(fingerprint_id):
     except requests.RequestException as e:
         messagebox.showerror("Request Error", f"Failed to connect to API: {e}")
         return None
-
-def fetch_faculty_data():
-    """Fetch faculty data from the Laravel API, excluding those with exactly two or more registered fingerprint IDs."""
-    try:
-        response = requests.get(FACULTIES_URL)
-        response.raise_for_status()
-        data = response.json()
-
-        # Filter out faculty members who have exactly two or more fingerprints registered
-        filtered_data = [
-            faculty for faculty in data 
-            if faculty.get('fingerprint_id') is None or len(faculty.get('fingerprint_id', [])) < 2
-        ]
-
-        return filtered_data
-
-    except requests.RequestException as e:
-        messagebox.showerror("Error", f"Error fetching faculty data: {e}")
-        return []
-    
-    
-def fetch_admin_data():
-    """Fetch admin data from the Laravel API, excluding those with exactly two or more registered fingerprint IDs."""
-    try:
-        response = requests.get(ADMIN_URL)
-        response.raise_for_status()
-        data = response.json()
-
-        # Filter out admin members who have exactly two or more fingerprints registered
-        filtered_data = [
-            admin for admin in data 
-            if admin.get('fingerprint_id') is None or len(admin.get('fingerprint_id', [])) < 2
-        ]
-
-        return filtered_data
-
-    except requests.RequestException as e:
-        messagebox.showerror("Error", f"Error fetching faculty data: {e}")
-        return []
 
 def post_fingerprint(email, fingerprint_id):
     """Post fingerprint data to the Laravel API."""
@@ -753,179 +715,10 @@ def get_highest_fingerprint_id():
         messagebox.showerror("Error", f"Failed to read stored fingerprints: {e}")
         return 0
 
-# Set the next fingerprint ID based on the highest ID found in the sensor
-next_fingerprint_id = get_highest_fingerprint_id() + 1
 
-def check_fingerprint_exists():
-    """Check if the current fingerprint is already registered."""
-    print("Searching for existing fingerprint...")
-    if finger.finger_search() == adafruit_fingerprint.OK:
-        existing_user = get_user(finger.finger_id)
-        if existing_user:
-            messagebox.showwarning("Error", f"Fingerprint already registered to {existing_user}")
-            return True
-    return False
-
-def enroll_fingerprint(email):
-    """Enroll a fingerprint for a faculty member, ensuring it's not already registered."""
-    global next_fingerprint_id
-
-    print("Waiting for image...")
-    # Attempt to capture the first image
-    while finger.get_image() != adafruit_fingerprint.OK:
-        pass
-
-    print("Templating first image...")
-    if finger.image_2_tz(1) != adafruit_fingerprint.OK:
-        messagebox.showwarning("Error", "Failed to template the first fingerprint image.")
-        return False
-
-    print("Checking if fingerprint is already registered...")
-    if finger.finger_search() == adafruit_fingerprint.OK:
-        existing_user = get_user(finger.finger_id)
-        if existing_user:
-            messagebox.showwarning("Error", f"Fingerprint already registered to {existing_user}")
-            return False
-
-    # Prompt to place the finger again for verification
-    print("Place the same finger again...")
-    while finger.get_image() != adafruit_fingerprint.OK:
-        pass
-
-    print("Templating second image...")
-    if finger.image_2_tz(2) != adafruit_fingerprint.OK:
-        messagebox.showwarning("Error", "Failed to template the second fingerprint image.")
-        return False
-    
-    print("Re-Checking if fingerprint is already registered...")
-    if finger.finger_search() == adafruit_fingerprint.OK:
-        existing_user = get_user(finger.finger_id)
-        if existing_user:
-            messagebox.showwarning("Error", f"Fingerprint already registered to {existing_user}")
-            return False
-
-    print("Creating model from images...")
-    if finger.create_model() != adafruit_fingerprint.OK:
-        messagebox.showwarning("Error", "Failed to create fingerprint model from images.")
-        return False
-
-    print(f"Storing model at location #{next_fingerprint_id}...")
-    if finger.store_model(next_fingerprint_id) != adafruit_fingerprint.OK:
-        messagebox.showwarning("Error", "Failed to store fingerprint model.")
-        return False
-
-    # Post the fingerprint data to the API
-    post_fingerprint(email, next_fingerprint_id)
-    next_fingerprint_id += 1  # Increment the ID for the next registration
-    return True
-
-def on_enroll_button_click():
-    """Callback function for the enroll button."""
-    selected_item = tree.selection()
-    if not selected_item:
-        messagebox.showwarning("Selection Error", "Please select a row from the table.")
-        return
-
-    item = tree.item(selected_item)
-    table_name = item['values'][0]  # Assuming name is in the first column
-    email = item['values'][1]  # Assuming email is in the second column
-
-    # Enroll fingerprint with the selected email
-    success = enroll_fingerprint(email)
-    if not success:
-        messagebox.showwarning("Enrollment Error", "Failed to enroll fingerprint.")
-    else:
-        # Refresh the table to update or remove the faculty if they now have 2 fingerprints
-        refresh_table()
-
-def refresh_table():
-    """Refresh the table with data from the Laravel API."""
-    for row in tree.get_children():
-        tree.delete(row)
-
-    faculty_data = fetch_faculty_data()
-    for faculty in faculty_data:
-        # Only display faculty who have less than 2 fingerprints registered
-        tree.insert("", tk.END, values=(faculty['name'], faculty['email']))
-    
-    admin_data = fetch_admin_data()
-    for admin in admin_data:
-        # Only display admin who have less than 2 fingerprints registered
-        tree.insert("", tk.END, values=(admin['name'], admin['email']))
-
-def back_to_main():
-    """Function to go back to threadproc.py UI."""
-    root.destroy()  # Close the current window
-    subprocess.Popen(["python3", "threadproc.py"])  # Run threadproc.py
-
-def cleanup():
-    """Cleanup all connections and resources."""
-    # If you have opened any serial ports, close them here
-    if finger and finger.uart:
-        finger.uart.close()
-    GPIO.cleanup()  # Clean up GPIO pins if they were set
-
-# Initialize Tkinter window
-def center_window(window, width, height):
-    screen_width = window.winfo_screenwidth()
-    screen_height = window.winfo_screenheight()
-    x = (screen_width // 2) - (width // 2)
-    y = (screen_height // 2) - (height // 2)
-    window.geometry(f'{width}x{height}+{x}+{y}')
-
+# Create the main window
 root = tk.Tk()
-root.configure(bg='#2D3F7C')
-root.title("Faculty Fingerprint Enrollment")
+app = AttendanceApp(root)
 
-panel = tk.Frame(root, bg='#F6F5FB')
-panel.place(x=50, y=50, width=600, height=400)
-
-# Create a new style for the Treeview with background color set to #D3D1ED
-style = ttk.Style()
-style.configure("LogsTable.Treeview.Heading", background="#D3D1ED", font=("Helvetica", 10, "bold"))
-style.configure("LogsTable.Treeview", background="#F6F5FB", fieldbackground="#F6F5FB", rowheight=25)
-
-# Create Treeview for displaying faculty data
-columns = ("name", "email")
-tree = ttk.Treeview(root, columns=columns, show="headings", style="LogsTable.Treeview")
-
-# Configure column widths
-tree.column("name", width=250)  # Set width for "name" column
-tree.column("email", width=250)  # Set width for "email" column
-
-# Set headings
-tree.heading("name", text="Name")
-tree.heading("email", text="Email")
-
-# Set height (number of visible rows)
-tree.configure(height=10)  # Number of visible rows
-tree.place(x=100, y=80)
-
-bold_font = font.Font(size=10, weight="bold")
-
-# Refresh Button
-refresh_button = tk.Button(root, text="Refresh Data", font=bold_font, width=20, height=2, command=refresh_table)
-refresh_button.place(x=150, y=380)
-
-# Enroll Button
-enroll_button = tk.Button(root, text="Enroll Fingerprint", font=bold_font, width=20, height=2,
-                          command=on_enroll_button_click)
-enroll_button.place(x=400, y=380)
-
-# Add a "Back to Main" button below the Refresh and Enroll buttons
-back_button = tk.Button(root, text="Back to Main", font=bold_font, width=20, height=2, command=back_to_main)
-back_button.place(x=275, y=440)  # Position it below the existing buttons
-
-# Load initial data
-refresh_table()
-
-center_window(root, 700, 500)
-
-# Run the Tkinter event loop
+# Run the application
 root.mainloop()
-
-
-
-
-
-
