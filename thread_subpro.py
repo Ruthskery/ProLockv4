@@ -144,13 +144,45 @@ class AttendanceApp:
         right_image_label2.image = right_photo2  # Keep a reference to avoid garbage collection
         right_image_label2.pack(side="right", padx=5)
 
-        # Add additional UI elements (e.g., log table, input fields, etc.)
-        # Example: Logs Table
-        self.create_logs_table(self.attendance_frame)
+        # Create the main container for the fingerprint and NFC components
+        top_frame = ttk.Frame(self.attendance_frame, padding="10", style="ContainerFrame.TFrame")
+        top_frame.pack(side="top", fill="x")
 
-        # Button to open the fingerprint enrollment form
-        enroll_button = tk.Button(self.attendance_frame, text="Open Fingerprint Enrollment", command=self.open_enrollment_form)
-        enroll_button.pack(pady=10)
+        # Fingerprint frame
+        left_frame = ttk.Frame(top_frame, padding="10", style="ContainerFrame.TFrame")
+        left_frame.pack(side="left", fill="y", expand=True)
+        fingerprint_label = ttk.Label(left_frame, text="Fingerprint Sensor", font=("Arial", 16, "bold"), background="#F6F5FB")
+        fingerprint_label.pack(pady=20)
+
+        # Load and resize an image for fingerprint
+        image_path = "fingericon.png"  # Replace with your image file path
+        desired_width = 150
+        desired_height = 130
+
+        image = Image.open(image_path)
+        image = image.resize((desired_width, desired_height))
+        photo = ImageTk.PhotoImage(image)
+
+        image_label = tk.Label(left_frame, image=photo, bg="#F6F5FB")
+        image_label.image = photo  # Keep a reference to the image
+        image_label.pack()
+
+        # NFC frame
+        right_frame = ttk.Frame(top_frame, padding="10", style="ContainerFrame.TFrame")
+        right_frame.pack(side="right", fill="y", expand=True)
+
+        # Student Number, Name, Year, Section labels and entries
+        self.student_number_entry = self.create_label_entry(right_frame, "Student Number:", label_font)
+        self.name_entry = self.create_label_entry(right_frame, "Name:", label_font)
+        self.year_entry = self.create_label_entry(right_frame, "Year:", label_font)
+        self.section_entry = self.create_label_entry(right_frame, "Section:", label_font)
+
+        # Error Message Label
+        self.error_label = tk.Label(self.attendance_frame, text="", font=("Helvetica", 10, "bold", "italic"), foreground="red", bg="#000000")
+        self.error_label.pack(pady=10)
+
+        # Logs Table
+        self.create_logs_table(self.attendance_frame)
 
     def open_enrollment_form(self):
         # Hide the attendance frame
@@ -236,6 +268,13 @@ class AttendanceApp:
             else:
                 print("No Match", "No matching fingerprint found in the database.")
                 self.speak("No matching fingerprint found.")
+
+    def create_label_entry(self, frame, text, font_style):
+        label = ttk.Label(frame, text=text, font=font_style, background="#F6F5FB")
+        label.pack(pady=5)
+        entry = ttk.Entry(frame, font=font_style)
+        entry.pack(pady=5)
+        return entry
 
     def create_logs_table(self, parent_frame):
         # Create a new style for the Treeview with background color set to #D3D1ED
