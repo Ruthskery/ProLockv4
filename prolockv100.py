@@ -11,6 +11,15 @@ import requests
 from datetime import datetime, timedelta
 import pyttsx3  # Import pyttsx3 for text-to-speech
 
+# Define get_next_fingerprint_id function
+def get_next_fingerprint_id():
+    """Fetch the next available fingerprint ID from the sensor storage."""
+    max_ids = 127  # Assuming the sensor can store up to 127 fingerprints
+    for i in range(1, max_ids + 1):
+        if finger.load_model(i) != adafruit_fingerprint.OK:
+            return i
+    return max_ids + 1  # This should not happen if the sensor's capacity is not exceeded
+
 # API URLs for Fingerprint, NFC, and Current Date-Time
 FINGERPRINT_API_URL = "https://prolocklogger.pro/api/getuserbyfingerprint/"
 TIME_IN_FINGERPRINT_URL = "https://prolocklogger.pro/api/logs/time-in/fingerprint"
@@ -33,6 +42,7 @@ FACULTIES_URL = f'{API_URL}/users/role/2'
 ENROLL_URL = f'{API_URL}/users/update-fingerprint'
 ADMIN_URL = f'{API_URL}/admin/role/1'
 
+
 # GPIO pin configuration for the solenoid lock and buzzer
 SOLENOID_PIN = 17
 BUZZER_PIN = 27
@@ -46,6 +56,9 @@ GPIO.setup(BUZZER_PIN, GPIO.OUT)
 uart = serial.Serial("/dev/ttyUSB0", baudrate=57600, timeout=1)
 finger = adafruit_fingerprint.Adafruit_Fingerprint(uart)
 
+# Initialize the next fingerprint ID globally
+next_fingerprint_id = get_next_fingerprint_id()  # Call the function here
+
 # Initialize Tkinter window
 def center_window(window, width, height):
     screen_width = window.winfo_screenwidth()
@@ -55,6 +68,7 @@ def center_window(window, width, height):
     window.geometry(f'{width}x{height}+{x}+{y}')
 
 class FingerprintEnrollment:
+
     def __init__(self, root, attendance_app):
         self.root = root
         self.attendance_app = attendance_app
@@ -230,12 +244,15 @@ class FingerprintEnrollment:
             return
 
         item = self.tree.item(selected_item)
+        table_name = item['values'][0]  # Assuming name is in the first column
         email = item['values'][1]  # Assuming email is in the second column
 
+        # Enroll fingerprint with the selected email
         success = self.enroll_fingerprint(email)
         if not success:
             messagebox.showwarning("Enrollment Error", "Failed to enroll fingerprint.")
         else:
+            # Refresh the table to update or remove the faculty if they now have 2 fingerprints
             self.refresh_table()
 
     def back_to_attendance(self):
@@ -245,63 +262,60 @@ class FingerprintEnrollment:
         self.attendance_app.start_fingerprint_scanning()  # Start fingerprint scanning when returning to attendance
 
     def enroll_fingerprint(self, email):
-        """Enroll a fingerprint for a faculty member, ensuring it's not already registered."""
-        global next_fingerprint_id
+        global next_fingerprint_id  # Use the global variable
 
         print("Waiting for image...")
+        # Attempt to capture the first image
+        while finger.get_image() != adafruit_fingerprint.OK:
+            pass
 
-        try:
-            # Attempt to capture the first image
-            while finger.get_image() != adafruit_fingerprint.OK:
-                pass
-
-            print("Templating first image...")
-            if finger.image_2_tz(1) != adafruit_fingerprint.OK:
-                messagebox.showwarning("Error", "Failed to template the first fingerprint image.")
-                return False
-
-            print("Checking if fingerprint is already registered...")
-            if finger.finger_search() == adafruit_fingerprint.OK:
-                existing_user = self.get_user(finger.finger_id)
-                if existing_user:
-                    messagebox.showwarning("Error", f"Fingerprint already registered to {existing_user}")
-                    return False
-
-            print("Place the same finger again...")
-            while finger.get_image() != adafruit_fingerprint.OK:
-                pass
-
-            print("Templating second image...")
-            if finger.image_2_tz(2) != adafruit_fingerprint.OK:
-                messagebox.showwarning("Error", "Failed to template the second fingerprint image.")
-                return False
-
-            print("Re-Checking if fingerprint is already registered...")
-            if finger.finger_search() == adafruit_fingerprint.OK:
-                existing_user = self.get_user(finger.finger_id)
-                if existing_user:
-                    messagebox.showwarning("Error", f"Fingerprint already registered to {existing_user}")
-                    return False
-
-            print("Creating model from images...")
-            if finger.create_model() != adafruit_fingerprint.OK:
-                messagebox.showwarning("Error", "Failed to create fingerprint model from images.")
-                return False
-
-            print(f"Storing model at location #{next_fingerprint_id}...")
-            if finger.store_model(next_fingerprint_id) != adafruit_fingerprint.OK:
-                messagebox.showwarning("Error", "Failed to store fingerprint model.")
-                return False
-
-            self.post_fingerprint(email, next_fingerprint_id)
-            next_fingerprint_id += 1
-            return True
-
-        except serial.SerialException as e:
-            messagebox.showerror("Serial Error", f"Serial communication error: {e}")
-            print(f"Serial communication error: {e}")
-            # Optional: Try reconnecting the device or prompting the user to check connections
+        print("Templating first image...")
+        if finger.image_2_tz(1) != adafruit_fingerprint.OK:
+            messagebox.showwarning("Error", "Failed to template the first fingerprint image.")
             return False
+
+        print("Checking if fingerprint is already registered...")
+        if finger.finger_search() == adafruit_fingerprint.OK:
+            existing_user = self.get_user(finger.finger_id)
+            if existing_user:
+                messagebox.showwarning("Error", f"Fingerprint already registered to {existing_user}")
+                return False
+
+        # Prompt to place the finger again for verification
+        print("Place the same finger again...")
+        while finger.get_image() != adafruit_fingerprint.OK:
+            pass
+
+        print("Templating second image...")
+        if finger.image_2_tz(2) != adafruit_fingerprint.OK:
+            messagebox.showwarning("Error", "Failed to template the second fingerprint image.")
+            return False
+
+        print("Re-Checking if fingerprint is already registered...")
+        if finger.finger_search() == adafruit_fingerprint.OK:
+            existing_user = self.get_user(finger.finger_id)
+            if existing_user:
+                messagebox.showwarning("Error", f"Fingerprint already registered to {existing_user}")
+                return False
+
+        print("Creating model from images...")
+        if finger.create_model() != adafruit_fingerprint.OK:
+            messagebox.showwarning("Error", "Failed to create fingerprint model from images.")
+            return False
+
+        # Ensure next_fingerprint_id is up-to-date before storing the model
+        next_fingerprint_id = get_next_fingerprint_id()
+
+        print(f"Storing model at location #{next_fingerprint_id}...")
+        if finger.store_model(next_fingerprint_id) != adafruit_fingerprint.OK:
+            messagebox.showwarning("Error", "Failed to store fingerprint model.")
+            return False
+
+        # Post the fingerprint data to the API
+        self.post_fingerprint(email, next_fingerprint_id)
+        next_fingerprint_id += 1  # Increment the ID for the next registration
+        return True
+
 
 
     def get_user(self, fingerprint_id):
